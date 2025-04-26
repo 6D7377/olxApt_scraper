@@ -1,0 +1,10 @@
+{
+    "number_of_pages": 5,
+    "max_retries": 3,
+    "database": {
+      "host": "localhost",
+      "user": "root",
+      "password": "pesPatron",
+      "database_name": "olx"
+    }
+  }
