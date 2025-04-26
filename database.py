@@ -3,7 +3,7 @@ import logging
 import json
 
 # Configure logging
-logging.basicConfig(filename='scraper.log', level=logging.ERROR)
+logging.basicConfig(filename='scraper.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load database configuration
 with open("config.json", "r") as config_file:
@@ -19,9 +19,13 @@ db_connection = mysql.connector.connect(
 )
 cursor = db_connection.cursor()
 
+def sanitize_table_name(city_name):
+    """Sanitize the city name to create a valid SQL table name."""
+    return f"ads_{city_name.replace('-', '_').replace(' ', '_')}"
+
 def create_city_table(city_name):
     """Create a table for a specific city."""
-    table_name = f"ads_{city_name.replace(' ', '_')}"
+    table_name = sanitize_table_name(city_name)
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS {table_name} (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -43,8 +47,9 @@ def save_to_db(table_name, data):
         VALUES (%s, %s, %s, %s)
         """, data)
         db_connection.commit()
+        logging.info(f"Record successfully inserted into {table_name}: {data}")
     except mysql.connector.Error as e:
-        log_error(f"Database insertion error: {e}")
+        log_error(f"Database insertion error for record {data}: {e}")
 
 def close_connection():
     """Close database connection."""
