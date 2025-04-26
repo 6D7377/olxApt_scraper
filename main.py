@@ -3,6 +3,15 @@ import re
 import requests
 from database import create_city_table, close_connection
 from scraper import scrape_ads
+import logging
+
+# Configure logging
+logging.basicConfig(
+    filename='logging.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filemode='a'
+)
 
 # Load configuration
 with open("config.json", "r") as config_file:
@@ -23,7 +32,7 @@ def is_city_available(city):
     """Check if the city page exists by making an HTTP request."""
     base_url = f"https://www.olx.ua/uk/{city}/q-%D0%BE%D1%80%D0%B5%D0%BD%D0%B4%D0%B0-%D0%B6%D0%B8%D1%82%D0%BB%D0%B0/"
     try:
-        response = requests.head(base_url, timeout=10)
+        response = requests.get(base_url, stream=True, timeout=10)  # Changed to GET with stream=True
         if response.status_code == 404:
             print(f"The city '{city}' is not available on the platform.")
             return False
@@ -49,12 +58,21 @@ def main():
         base_url = f"https://www.olx.ua/uk/{city}/q-%D0%BE%D1%80%D0%B5%D0%BD%D0%B4%D0%B0-%D0%B6%D0%B8%D1%82%D0%BB%D0%B0/"
         
         # Scrape ads and save to database
+        print("Starting the scraping process...")
+        logging.info("Starting the scraping process...")
         scrape_ads(base_url, table_name, config["number_of_pages"], config["max_retries"])
+        print("Scraping process completed.")
+
+        # Display total records added
+        print(f"All records have been successfully added to the database for the city '{city}'.")
+        logging.info(f"All records have been successfully added to the database for the city '{city}'.")
     
     except ValueError as e:
         print(f"Input Error: {e}")
+        logging.error(f"Input Error: {e}")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
+        logging.error(f"An unexpected error occurred: {e}")
     finally:
         # Close database connection
         close_connection()
