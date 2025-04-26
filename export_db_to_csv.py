@@ -21,6 +21,10 @@ db_connection = mysql.connector.connect(
 )
 cursor = db_connection.cursor()
 
+def sanitize_table_name(city_name):
+    """Sanitize the city name to create a valid SQL table name."""
+    return f"ads_{city_name.replace('-', '_').replace(' ', '_')}"
+
 def export_table_to_csv(table_name, output_file):
     """Export a database table to a CSV file."""
     try:
@@ -59,11 +63,13 @@ def close_connection():
 if __name__ == "__main__":
     # Prompt the user to input the city name
     city_name = input("Enter the city name: ").strip()
-    table_name = f"ads_{city_name.replace(' ', '_')}"  # Generate table name dynamically
+    table_name = sanitize_table_name(city_name)  # Use the same sanitization logic as database.py
 
     # Define the output file path in the 'exports' folder
     output_file = os.path.join("exports", f"{table_name}.csv")
 
     # Export the table to CSV
     export_table_to_csv(table_name, output_file)
+
+    # Close the database connection
     close_connection()
