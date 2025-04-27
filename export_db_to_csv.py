@@ -2,20 +2,23 @@ import os
 import csv
 import mysql.connector
 import logging
-import json
+import re
+from decouple import config
 
 # Configure logging
-logging.basicConfig(filename='scraper.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    filename='logging.log',  # Log file renamed to 'logging.log'
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filemode='a'
+)
 
-# Load database configuration
-with open("config.json", "r") as config_file:
-    config = json.load(config_file)
-
+# Load database configuration from environment variables
 db_connection = mysql.connector.connect(
-    host=config["database"]["host"],
-    user=config["database"]["user"],
-    password=config["database"]["password"],
-    database=config["database"]["database_name"],
+    host=config("DB_HOST", default="localhost"),
+    user=config("DB_USER", default="root"),
+    password=config("DB_PASSWORD", default=""),
+    database=config("DB_NAME", default="olx"),
     charset='utf8mb4',
     collation='utf8mb4_unicode_ci'
 )
@@ -23,7 +26,10 @@ cursor = db_connection.cursor()
 
 def sanitize_table_name(city_name):
     """Sanitize the city name to create a valid SQL table name."""
-    return f"ads_{city_name.replace('-', '_').replace(' ', '_')}"
+    sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '', city_name.replace('-', '_').replace(' ', '_'))
+    if not sanitized_name:
+        raise ValueError("City name results in an invalid table name.")
+    return f"ads_{sanitized_name}"
 
 def export_table_to_csv(table_name, output_file):
     """Export a database table to a CSV file."""
@@ -42,12 +48,14 @@ def export_table_to_csv(table_name, output_file):
         with open(output_file, mode='w', newline='', encoding='utf-8') as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow(column_names)  # Write header
-            csv_writer.writerows(rows)        # Write data rows
+            csv_writer.writerows(rows)         # Write data rows
 
         logging.info(f"Data successfully exported from {table_name} to {output_file}")
         print(f"Data successfully exported to {output_file}")
     except mysql.connector.Error as e:
         log_error(f"Error exporting table {table_name} to CSV: {e}")
+    except Exception as e:
+        log_error(f"Unexpected error during export: {e}")
 
 def log_error(message):
     """Log errors."""
@@ -61,15 +69,20 @@ def close_connection():
 
 # Example usage
 if __name__ == "__main__":
-    # Prompt the user to input the city name
-    city_name = input("Enter the city name: ").strip()
-    table_name = sanitize_table_name(city_name)  # Use the same sanitization logic as database.py
+    try:
+        # Prompt the user to input the city name
+        city_name = input("Enter the city name: ").strip()
+        table_name = sanitize_table_name(city_name)  # Use the same sanitization logic as database.py
 
-    # Define the output file path in the 'exports' folder
-    output_file = os.path.join("exports", f"{table_name}.csv")
+        # Define the output file path in the 'exports' folder
+        output_file = os.path.join("exports", f"{table_name}.csv")
 
-    # Export the table to CSV
-    export_table_to_csv(table_name, output_file)
+        # Export the table to CSV
+        export_table_to_csv(table_name, output_file)
 
-    # Close the database connection
-    close_connection()
+        # Close the database connection
+        close_connection()
+    except ValueError as e:
+        log_error(f"Invalid input: {e}")
+    except Exception as e:
+        log_error(f"Unexpected error: {e}")
