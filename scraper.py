@@ -6,13 +6,13 @@ import logging
 
 # Configure logging
 logging.basicConfig(
-    filename='logging.log',  # Log file renamed to 'logging.log'
+    filename='logging.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     filemode='a'
 )
 
-# Create a session for persistent connections
+# Create a session
 session = requests.Session()
 session.headers.update({'User-Agent': 'Mozilla/5.0'})
 
@@ -52,17 +52,35 @@ def extract_ad_details(ad_url, max_retries):
         log_error(f"Failed to fetch or parse advertisement URL: {ad_url}")
         return None
 
-    # Try to extract the title with fallback logic
-    title = None
+    # Extract title
     title_element = soup.find('h4', class_='css-10ofhqw')
     if title_element:
         title = title_element.get_text(strip=True)
     else:
-        # Fallback: Try another strategy to find the title
         title_element = soup.find('h1') or soup.find('h2')
         title = title_element.get_text(strip=True) if title_element else "No Title Found"
 
-    return {"title": title}
+    # Extract price
+    price_element = soup.find('h3', class_='css-fqcbii')
+    if price_element:
+        price = price_element.get_text(strip=True)
+    else:
+        price = "No Price Found"
+
+    # Extract area
+    area = "No Area Found"
+    parameters = soup.find_all('p', class_='css-1los5bp')
+    for param in parameters:
+        if "Загальна площа" in param.get_text():
+            area_text = param.get_text(strip=True)
+            area = area_text.replace("Загальна площа:", "").strip()
+            break
+
+    return {
+        "title": title,
+        "price": price,
+        "area": area
+    }
 
 def scrape_ads(base_url, table_name, total_pages, max_retries):
     """Scrape ads from multiple pages and save them to the database."""
@@ -74,7 +92,6 @@ def scrape_ads(base_url, table_name, total_pages, max_retries):
         logging.info(f"Parsing page: {page_url}")
         print(f"Parsing page: {page_url}")
 
-        # Collect links for all ads on the current page
         ad_links = extract_ad_links(page_url, max_retries)
         if not ad_links:
             logging.info(f"No ads found on page {page_number}.")
@@ -89,7 +106,12 @@ def scrape_ads(base_url, table_name, total_pages, max_retries):
             ad_details = extract_ad_details(ad_link, max_retries)
             if ad_details:
                 # Save the extracted ad details to the database
-                save_to_db(table_name, (ad_details["title"], "", "", ad_link))
+                save_to_db(table_name, (
+                    ad_details["title"],
+                    ad_details["price"],
+                    ad_details["area"],
+                    ad_link
+                ))
                 total_ads += 1
                 logging.info(f"Ad saved: {ad_details['title']}")
             time.sleep(2)  # Delay to avoid being blocked
