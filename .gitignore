@@ -2,3 +2,4 @@ __pycache__/
 exports/
 .env
 logging.log
+scraper.log
