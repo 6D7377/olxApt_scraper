@@ -3,6 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from database import save_to_db, log_error
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configure logging
 logging.basicConfig(
@@ -83,38 +84,44 @@ def extract_ad_details(ad_url, max_retries):
     }
 
 def scrape_ads(base_url, table_name, total_pages, max_retries):
-    """Scrape ads from multiple pages and save them to the database."""
+    """Scrape ads from multiple pages and save them to the database in parallel."""
     logging.info("Program started successfully. Beginning the scraping process.")
     total_ads = 0
 
-    for page_number in range(1, total_pages + 1):
-        page_url = f"{base_url}?page={page_number}"
-        logging.info(f"Parsing page: {page_url}")
-        print(f"Parsing page: {page_url}")
+    with ThreadPoolExecutor(max_workers=5) as executor:  # Limit to 5 concurrent threads
+        for page_number in range(1, total_pages + 1):
+            page_url = f"{base_url}?page={page_number}"
+            logging.info(f"Parsing page: {page_url}")
+            print(f"Parsing page: {page_url}")
 
-        ad_links = extract_ad_links(page_url, max_retries)
-        if not ad_links:
-            logging.info(f"No ads found on page {page_number}.")
-            print(f"No ads found on page {page_number}.")
-            continue
+            ad_links = extract_ad_links(page_url, max_retries)
+            if not ad_links:
+                logging.info(f"No ads found on page {page_number}.")
+                print(f"No ads found on page {page_number}.")
+                continue
 
-        logging.info(f"Found {len(ad_links)} ads on page {page_number}.")
-        print(f"Found {len(ad_links)} ads on page {page_number}.")
+            logging.info(f"Found {len(ad_links)} ads on page {page_number}.")
+            print(f"Found {len(ad_links)} ads on page {page_number}.")
 
-        for ad_link in ad_links:
-            logging.info(f"Processing ad: {ad_link}")
-            ad_details = extract_ad_details(ad_link, max_retries)
-            if ad_details:
-                # Save the extracted ad details to the database
-                save_to_db(table_name, (
-                    ad_details["title"],
-                    ad_details["price"],
-                    ad_details["area"],
-                    ad_link
-                ))
-                total_ads += 1
-                logging.info(f"Ad saved: {ad_details['title']}")
-            time.sleep(2)  # Delay to avoid being blocked
+            # Use ThreadPoolExecutor to process ads concurrently
+            future_to_ad = {executor.submit(extract_ad_details, ad_link, max_retries): ad_link for ad_link in ad_links}
+            for future in as_completed(future_to_ad):
+                ad_link = future_to_ad[future]
+                try:
+                    ad_details = future.result()
+                    if ad_details:
+                        # Save the extracted ad details to the database
+                        save_to_db(table_name, (
+                            ad_details["title"],
+                            ad_details["price"],
+                            ad_details["area"],
+                            ad_link
+                        ))
+                        total_ads += 1
+                        logging.info(f"Ad saved: {ad_details['title']}")
+                except Exception as e:
+                    log_error(f"Error processing ad {ad_link}: {e}")
+            time.sleep(2)  # Delay to avoid overwhelming the server
 
     logging.info(f"Scraping completed. Total ads scraped: {total_ads}")
     print(f"Scraping completed. Total ads scraped: {total_ads}")
